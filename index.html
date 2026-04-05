@@ -163,10 +163,12 @@ footer a:hover{color:#c4a35a}
 
 <script src="https://cdn.jsdelivr.net/npm/deep-chat@2.4.0/dist/deepChat.bundle.js"></script>
 <script>
-(function(){
+window.addEventListener("load", function(){
   const API_URL = "https://zen-coach-api.onrender.com";
   const chat = document.getElementById("zen-chat");
   const conversationHistory = [];
+
+  if (!chat) { console.error("deep-chat element not found"); return; }
 
   // Fix share link with current URL
   document.getElementById("share-link").href =
@@ -174,44 +176,52 @@ footer a:hover{color:#c4a35a}
     encodeURIComponent("Just tried Zen Coach — an AI life coach grounded in Zen philosophy.") +
     "&url=" + encodeURIComponent(window.location.href);
 
-  // Load opening message
-  fetch(API_URL + "/api/chat", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({messages: []})
-  })
-  .then(r => r.json())
-  .then(data => {
-    if(data.text){
-      chat.setPlaceholderMessage({text: data.text, role: "ai"});
-    }
-  })
-  .catch(() => {
-    chat.setPlaceholderMessage({text: "What brought you here tonight?", role: "ai"});
-  });
+  // Wait for deep-chat component to be ready
+  function initChat() {
+    // Set connection
+    chat.connect = {
+      url: API_URL + "/api/chat",
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+    };
 
-  // Handle messages
-  chat.requestInterceptor = (details) => {
-    const userText = details.body.messages[details.body.messages.length - 1].text;
-    conversationHistory.push({role: "user", text: userText});
+    // Handle messages
+    chat.requestInterceptor = (details) => {
+      const userText = details.body.messages[details.body.messages.length - 1].text;
+      conversationHistory.push({role: "user", text: userText});
+      details.body = {messages: [...conversationHistory]};
+      return details;
+    };
 
-    details.body = {messages: [...conversationHistory]};
-    return details;
-  };
+    chat.responseInterceptor = (response) => {
+      if(response.text){
+        conversationHistory.push({role: "assistant", text: response.text});
+      }
+      return response;
+    };
 
-  chat.responseInterceptor = (response) => {
-    if(response.text){
-      conversationHistory.push({role: "assistant", text: response.text});
-    }
-    return response;
-  };
+    // Load opening message
+    fetch(API_URL + "/api/chat", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({messages: []})
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if(data.text && chat.setPlaceholderMessage){
+        chat.setPlaceholderMessage({text: data.text, role: "ai"});
+      }
+    })
+    .catch(function(){});
+  }
 
-  chat.connect = {
-    url: API_URL + "/api/chat",
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-  };
-})();
+  // deep-chat may need a moment to register as custom element
+  if (customElements.get("deep-chat")) {
+    initChat();
+  } else {
+    customElements.whenDefined("deep-chat").then(initChat);
+  }
+});
 </script>
 </body>
 </html>
